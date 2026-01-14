@@ -40,6 +40,7 @@ if 'game_step' not in st.session_state:
     st.session_state.current_belief = None 
     st.session_state.true_A = None
     st.session_state.true_B = None
+    st.session_state.start_state_idx = 0
 
 # --- SIDEBAR: TOURNAMENT DIRECTOR ---
 with st.sidebar:
@@ -51,23 +52,27 @@ with st.sidebar:
         if pwd == ADMIN_PASSWORD:
             st.success("Director Access Active")
             
-            st.subheader("Define Hidden Reality")
-            # Removed 'caption' to fix TypeError and added data conversion
+            st.subheader("1. Define Hidden Reality")
             t_a_df = st.data_editor(pd.DataFrame(np.eye(3), columns=STATES, index=STATES), key="setup_a")
             t_b_df = st.data_editor(pd.DataFrame(np.full((3,3), 0.33), columns=OBSERVATIONS, index=STATES), key="setup_b")
+            
+            st.subheader("2. Set Initial Conditions")
+            start_state_name = st.selectbox("Starting State", STATES)
+            st.session_state.start_state_idx = STATES.index(start_state_name)
             
             steps = st.number_input("Tournament Length", 5, 20, 10)
             
             if st.button("Initialize Tournament Path"):
-                # Convert DF to Numpy for math
                 st.session_state.true_A = t_a_df.to_numpy()
                 st.session_state.true_B = t_b_df.to_numpy()
                 
                 path = []
-                curr = 0 
+                curr = st.session_state.start_state_idx 
                 for _ in range(steps + 1):
+                    # Step 0 to N: State then Observation
                     o = np.random.choice([0,1,2], p=st.session_state.true_B[curr])
                     path.append((curr, o))
+                    # Move to next state for the next time step
                     curr = np.random.choice([0,1,2], p=st.session_state.true_A[curr])
                 
                 st.session_state.true_path = path
@@ -93,8 +98,9 @@ true_state, true_obs = st.session_state.true_path[step]
 
 st.subheader(f"Time Step: {step}")
 
+# Dynamic Hint based on Director's Choice
 if step == 0:
-    st.warning("🚨 INITIAL INTEL: The system is confirmed to be in **State 1**.")
+    st.warning(f"🚨 INITIAL INTEL: The system is confirmed to be in **{STATES[st.session_state.start_state_idx]}**.")
 else:
     st.info(f"🛰️ SENSOR DATA RECEIVED: **{OBSERVATIONS[true_obs]}**")
 
@@ -110,6 +116,7 @@ with c2:
 
 if step == 0:
     st.write("### Initial Belief Vector")
+    st.caption("How certain are you of the current state? (Should sum to 1.0)")
     s_vec_df = st.data_editor(pd.DataFrame([[0.33, 0.33, 0.34]], columns=STATES), key="s_vec_0")
     s_vec = s_vec_df.to_numpy().flatten()
 else:
@@ -126,9 +133,9 @@ if st.button("Submit Forecast"):
     st.session_state.history.append({
         "Step": step,
         "Outcome": STATES[true_state],
-        "Forecaster Score": s_brier,
-        "Baseline Score": b_brier,
-        "Relative Advantage": b_brier - s_brier 
+        "Forecaster Score": round(s_brier, 4),
+        "Baseline Score": round(b_brier, 4),
+        "Relative Advantage": round(b_brier - s_brier, 4)
     })
     st.session_state.current_belief = s_vec
     st.success(f"Forecast Committed! Reality revealed: {STATES[true_state]}")
